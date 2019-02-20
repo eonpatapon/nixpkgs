@@ -30,7 +30,7 @@ let
   occ = pkgs.writeScriptBin "nextcloud-occ" ''
     #! ${pkgs.stdenv.shell}
     cd ${pkgs.nextcloud}
-    exec /run/wrappers/bin/sudo -u nextcloud \
+    exec /run/wrappers/bin/sudo -E -u nextcloud \
       NEXTCLOUD_CONFIG_DIR="${cfg.home}/config" \
       ${phpPackage}/bin/php \
       -c ${pkgs.writeText "php.ini" phpOptionsStr}\
@@ -353,6 +353,7 @@ in {
         in {
           wantedBy = [ "multi-user.target" ];
           before = [ "phpfpm-nextcloud.service" ];
+          path = [ occ ];
           script = ''
             chmod og+x ${cfg.home}
             ln -sf ${pkgs.nextcloud}/apps ${cfg.home}/
