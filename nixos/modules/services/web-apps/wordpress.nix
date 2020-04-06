@@ -5,9 +5,10 @@ let
   inherit (lib) any attrValues concatMapStringsSep flatten literalExample;
   inherit (lib) mapAttrs mapAttrs' mapAttrsToList nameValuePair optional optionalAttrs optionalString;
 
-  eachSite = config.services.wordpress;
+  cfg = config.services.wordpress;
+  eachSite = config.services.wordpress.sites;
   user = "wordpress";
-  group = config.services.httpd.group;
+  webserver = config.services.${cfg.webserver};
   stateDir = hostName: "/var/lib/wordpress/${hostName}";
 
   pkg = hostName: cfg: pkgs.stdenv.mkDerivation rec {
@@ -74,293 +75,369 @@ let
     fi
   '';
 
-  siteOpts = { lib, name, ... }:
-    {
-      options = {
-        package = mkOption {
-          type = types.package;
-          default = pkgs.wordpress;
-          description = "Which WordPress package to use.";
-        };
+  siteOpts = { lib, name, ... }: {
+    options = {
 
-        uploadsDir = mkOption {
-          type = types.path;
-          default = "/var/lib/wordpress/${name}/uploads";
-          description = ''
-            This directory is used for uploads of pictures. The directory passed here is automatically
-            created and permissions adjusted as required.
-          '';
-        };
+      package = mkOption {
+        type = types.package;
+        default = pkgs.wordpress;
+        description = "Which WordPress package to use.";
+      };
 
-        plugins = mkOption {
-          type = types.listOf types.path;
-          default = [];
-          description = ''
-            List of path(s) to respective plugin(s) which are copied from the 'plugins' directory.
-            <note><para>These plugins need to be packaged before use, see example.</para></note>
-          '';
-          example = ''
-            # Wordpress plugin 'embed-pdf-viewer' installation example
-            embedPdfViewerPlugin = pkgs.stdenv.mkDerivation {
-              name = "embed-pdf-viewer-plugin";
-              # Download the theme from the wordpress site
-              src = pkgs.fetchurl {
-                url = "https://downloads.wordpress.org/plugin/embed-pdf-viewer.2.0.3.zip";
-                sha256 = "1rhba5h5fjlhy8p05zf0p14c9iagfh96y91r36ni0rmk6y891lyd";
-              };
-              # We need unzip to build this package
-              buildInputs = [ pkgs.unzip ];
-              # Installing simply means copying all files to the output directory
-              installPhase = "mkdir -p $out; cp -R * $out/";
+      uploadsDir = mkOption {
+        type = types.path;
+        default = "/var/lib/wordpress/${name}/uploads";
+        description = ''
+          This directory is used for uploads of pictures. The directory passed here is automatically
+          created and permissions adjusted as required.
+        '';
+      };
+
+      plugins = mkOption {
+        type = types.listOf types.path;
+        default = [];
+        description = ''
+          List of path(s) to respective plugin(s) which are copied from the 'plugins' directory.
+          <note><para>These plugins need to be packaged before use, see example.</para></note>
+        '';
+        example = ''
+          # Wordpress plugin 'embed-pdf-viewer' installation example
+          embedPdfViewerPlugin = pkgs.stdenv.mkDerivation {
+            name = "embed-pdf-viewer-plugin";
+            # Download the theme from the wordpress site
+            src = pkgs.fetchurl {
+              url = "https://downloads.wordpress.org/plugin/embed-pdf-viewer.2.0.3.zip";
+              sha256 = "1rhba5h5fjlhy8p05zf0p14c9iagfh96y91r36ni0rmk6y891lyd";
             };
+            # We need unzip to build this package
+            buildInputs = [ pkgs.unzip ];
+            # Installing simply means copying all files to the output directory
+            installPhase = "mkdir -p $out; cp -R * $out/";
+          };
 
-            And then pass this theme to the themes list like this:
-              plugins = [ embedPdfViewerPlugin ];
-          '';
-        };
+          And then pass this theme to the themes list like this:
+            plugins = [ embedPdfViewerPlugin ];
+        '';
+      };
 
-        themes = mkOption {
-          type = types.listOf types.path;
-          default = [];
-          description = ''
-            List of path(s) to respective theme(s) which are copied from the 'theme' directory.
-            <note><para>These themes need to be packaged before use, see example.</para></note>
-          '';
-          example = ''
-            # Let's package the responsive theme
-            responsiveTheme = pkgs.stdenv.mkDerivation {
-              name = "responsive-theme";
-              # Download the theme from the wordpress site
-              src = pkgs.fetchurl {
-                url = "https://downloads.wordpress.org/theme/responsive.3.14.zip";
-                sha256 = "0rjwm811f4aa4q43r77zxlpklyb85q08f9c8ns2akcarrvj5ydx3";
-              };
-              # We need unzip to build this package
-              buildInputs = [ pkgs.unzip ];
-              # Installing simply means copying all files to the output directory
-              installPhase = "mkdir -p $out; cp -R * $out/";
+      themes = mkOption {
+        type = types.listOf types.path;
+        default = [];
+        description = ''
+          List of path(s) to respective theme(s) which are copied from the 'theme' directory.
+          <note><para>These themes need to be packaged before use, see example.</para></note>
+        '';
+        example = ''
+          # Let's package the responsive theme
+          responsiveTheme = pkgs.stdenv.mkDerivation {
+            name = "responsive-theme";
+            # Download the theme from the wordpress site
+            src = pkgs.fetchurl {
+              url = "https://downloads.wordpress.org/theme/responsive.3.14.zip";
+              sha256 = "0rjwm811f4aa4q43r77zxlpklyb85q08f9c8ns2akcarrvj5ydx3";
             };
+            # We need unzip to build this package
+            buildInputs = [ pkgs.unzip ];
+            # Installing simply means copying all files to the output directory
+            installPhase = "mkdir -p $out; cp -R * $out/";
+          };
 
-            And then pass this theme to the themes list like this:
-              themes = [ responsiveTheme ];
-          '';
+          And then pass this theme to the themes list like this:
+            themes = [ responsiveTheme ];
+        '';
+      };
+
+      database = {
+        host = mkOption {
+          type = types.str;
+          default = "localhost";
+          description = "Database host address.";
         };
 
-        database = {
-          host = mkOption {
-            type = types.str;
-            default = "localhost";
-            description = "Database host address.";
-          };
-
-          port = mkOption {
-            type = types.port;
-            default = 3306;
-            description = "Database host port.";
-          };
-
-          name = mkOption {
-            type = types.str;
-            default = "wordpress";
-            description = "Database name.";
-          };
-
-          user = mkOption {
-            type = types.str;
-            default = "wordpress";
-            description = "Database user.";
-          };
-
-          passwordFile = mkOption {
-            type = types.nullOr types.path;
-            default = null;
-            example = "/run/keys/wordpress-dbpassword";
-            description = ''
-              A file containing the password corresponding to
-              <option>database.user</option>.
-            '';
-          };
-
-          tablePrefix = mkOption {
-            type = types.str;
-            default = "wp_";
-            description = ''
-              The $table_prefix is the value placed in the front of your database tables.
-              Change the value if you want to use something other than wp_ for your database
-              prefix. Typically this is changed if you are installing multiple WordPress blogs
-              in the same database.
-
-              See <link xlink:href='https://codex.wordpress.org/Editing_wp-config.php#table_prefix'/>.
-            '';
-          };
-
-          socket = mkOption {
-            type = types.nullOr types.path;
-            default = null;
-            defaultText = "/run/mysqld/mysqld.sock";
-            description = "Path to the unix socket file to use for authentication.";
-          };
-
-          createLocally = mkOption {
-            type = types.bool;
-            default = true;
-            description = "Create the database and database user locally.";
-          };
+        port = mkOption {
+          type = types.port;
+          default = 3306;
+          description = "Database host port.";
         };
 
-        virtualHost = mkOption {
-          type = types.submodule (import ../web-servers/apache-httpd/vhost-options.nix);
-          example = literalExample ''
-            {
-              adminAddr = "webmaster@example.org";
-              forceSSL = true;
-              enableACME = true;
-            }
-          '';
+        name = mkOption {
+          type = types.str;
+          default = "wordpress";
+          description = "Database name.";
+        };
+
+        user = mkOption {
+          type = types.str;
+          default = "wordpress";
+          description = "Database user.";
+        };
+
+        passwordFile = mkOption {
+          type = types.nullOr types.path;
+          default = null;
+          example = "/run/keys/wordpress-dbpassword";
           description = ''
-            Apache configuration can be done by adapting <option>services.httpd.virtualHosts</option>.
+            A file containing the password corresponding to
+            <option>database.user</option>.
           '';
         };
 
-        poolConfig = mkOption {
-          type = with types; attrsOf (oneOf [ str int bool ]);
-          default = {
-            "pm" = "dynamic";
-            "pm.max_children" = 32;
-            "pm.start_servers" = 2;
-            "pm.min_spare_servers" = 2;
-            "pm.max_spare_servers" = 4;
-            "pm.max_requests" = 500;
-          };
+        tablePrefix = mkOption {
+          type = types.str;
+          default = "wp_";
           description = ''
-            Options for the WordPress PHP pool. See the documentation on <literal>php-fpm.conf</literal>
-            for details on configuration directives.
+            The $table_prefix is the value placed in the front of your database tables.
+            Change the value if you want to use something other than wp_ for your database
+            prefix. Typically this is changed if you are installing multiple WordPress blogs
+            in the same database.
+
+            See <link xlink:href='https://codex.wordpress.org/Editing_wp-config.php#table_prefix'/>.
           '';
         };
 
-        extraConfig = mkOption {
-          type = types.lines;
-          default = "";
-          description = ''
-            Any additional text to be appended to the wp-config.php
-            configuration file. This is a PHP script. For configuration
-            settings, see <link xlink:href='https://codex.wordpress.org/Editing_wp-config.php'/>.
-          '';
-          example = ''
-            define( 'AUTOSAVE_INTERVAL', 60 ); // Seconds
-          '';
+        socket = mkOption {
+          type = types.nullOr types.path;
+          default = null;
+          defaultText = "/run/mysqld/mysqld.sock";
+          description = "Path to the unix socket file to use for authentication.";
+        };
+
+        createLocally = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Create the database and database user locally.";
         };
       };
 
-      config.virtualHost.hostName = mkDefault name;
+      virtualHost = mkOption {
+        type = types.submodule (import ../web-servers/apache-httpd/vhost-options.nix);
+        example = literalExample ''
+          {
+            adminAddr = "webmaster@example.org";
+            forceSSL = true;
+            enableACME = true;
+          }
+        '';
+        description = ''
+          Apache configuration can be done by adapting <option>services.httpd.virtualHosts</option>.
+        '';
+      };
+
+      poolConfig = mkOption {
+        type = with types; attrsOf (oneOf [ str int bool ]);
+        default = {
+          "pm" = "dynamic";
+          "pm.max_children" = 32;
+          "pm.start_servers" = 2;
+          "pm.min_spare_servers" = 2;
+          "pm.max_spare_servers" = 4;
+          "pm.max_requests" = 500;
+        };
+        description = ''
+          Options for the WordPress PHP pool. See the documentation on <literal>php-fpm.conf</literal>
+          for details on configuration directives.
+        '';
+      };
+
+      extraConfig = mkOption {
+        type = types.lines;
+        default = "";
+        description = ''
+          Any additional text to be appended to the wp-config.php
+          configuration file. This is a PHP script. For configuration
+          settings, see <link xlink:href='https://codex.wordpress.org/Editing_wp-config.php'/>.
+        '';
+        example = ''
+          define( 'AUTOSAVE_INTERVAL', 60 ); // Seconds
+        '';
+      };
+
     };
-in
-{
+  };
+
+in {
+
   # interface
   options = {
-    services.wordpress = mkOption {
-      type = types.attrsOf (types.submodule siteOpts);
-      default = {};
-      description = "Specification of one or more WordPress sites to serve via Apache.";
+    services.wordpress = {
+
+      sites = mkOption {
+        type = types.attrsOf (types.submodule siteOpts);
+        default = {};
+        description = "Specification of one or more WordPress sites to serve";
+      };
+
+      webserver = mkOption {
+        type = types.enum [ "httpd" "nginx" ];
+        default = "httpd";
+        description = ''
+          Whether to use apache2 or nginx for virtual host management.
+
+          Further nginx configuration can be done by adapting <literal>services.nginx.virtualHosts.&lt;name&gt;</literal>.
+          See <xref linkend="opt-services.nginx.virtualHosts"/> for further information.
+
+          Further apache2 configuration can be done by adapting <literal>services.httpd.virtualHosts.&lt;name&gt;</literal>.
+          See <xref linkend="opt-services.httpd.virtualHosts"/> for further information.
+        '';
+      };
+
     };
+
   };
 
   # implementation
-  config = mkIf (eachSite != {}) {
-
-    assertions = mapAttrsToList (hostName: cfg:
-      { assertion = cfg.database.createLocally -> cfg.database.user == user;
-        message = "services.wordpress.${hostName}.database.user must be ${user} if the database is to be automatically provisioned";
-      }
-    ) eachSite;
-
-    services.mysql = mkIf (any (v: v.database.createLocally) (attrValues eachSite)) {
-      enable = true;
-      package = mkDefault pkgs.mariadb;
-      ensureDatabases = mapAttrsToList (hostName: cfg: cfg.database.name) eachSite;
-      ensureUsers = mapAttrsToList (hostName: cfg:
-        { name = cfg.database.user;
-          ensurePermissions = { "${cfg.database.name}.*" = "ALL PRIVILEGES"; };
+  config = mkIf (eachSite != {}) (mkMerge [
+    {
+      assertions = mapAttrsToList (hostName: cfg:
+        { assertion = cfg.database.createLocally -> cfg.database.user == user;
+          message = "services.wordpress.${hostName}.database.user must be ${user} if the database is to be automatically provisioned";
         }
       ) eachSite;
-    };
 
-    services.phpfpm.pools = mapAttrs' (hostName: cfg: (
-      nameValuePair "wordpress-${hostName}" {
-        inherit user group;
-        settings = {
-          "listen.owner" = config.services.httpd.user;
-          "listen.group" = config.services.httpd.group;
-        } // cfg.poolConfig;
-      }
-    )) eachSite;
+      services.mysql = mkIf (any (v: v.database.createLocally) (attrValues eachSite)) {
+        enable = true;
+        package = mkDefault pkgs.mariadb;
+        ensureDatabases = mapAttrsToList (hostName: cfg: cfg.database.name) eachSite;
+        ensureUsers = mapAttrsToList (hostName: cfg:
+          { name = cfg.database.user;
+            ensurePermissions = { "${cfg.database.name}.*" = "ALL PRIVILEGES"; };
+          }
+        ) eachSite;
+      };
 
-    services.httpd = {
-      enable = true;
-      extraModules = [ "proxy_fcgi" ];
-      virtualHosts = mapAttrs (hostName: cfg: mkMerge [ cfg.virtualHost {
-        documentRoot = mkForce "${pkg hostName cfg}/share/wordpress";
-        extraConfig = ''
-          <Directory "${pkg hostName cfg}/share/wordpress">
-            <FilesMatch "\.php$">
-              <If "-f %{REQUEST_FILENAME}">
-                SetHandler "proxy:unix:${config.services.phpfpm.pools."wordpress-${hostName}".socket}|fcgi://localhost/"
-              </If>
-            </FilesMatch>
+      services.phpfpm.pools = mapAttrs' (hostName: cfg: (
+        nameValuePair "wordpress-${hostName}" {
+          inherit user;
+          group = webserver.group;
+          settings = {
+            "listen.owner" = webserver.user;
+            "listen.group" = webserver.group;
+          } // cfg.poolConfig;
+        }
+      )) eachSite;
 
-            # standard wordpress .htaccess contents
-            <IfModule mod_rewrite.c>
-              RewriteEngine On
-              RewriteBase /
-              RewriteRule ^index\.php$ - [L]
-              RewriteCond %{REQUEST_FILENAME} !-f
-              RewriteCond %{REQUEST_FILENAME} !-d
-              RewriteRule . /index.php [L]
-            </IfModule>
+      systemd.tmpfiles.rules = flatten (mapAttrsToList (hostName: cfg: [
+        "d '${stateDir hostName}' 0750 ${user} ${webserver.group} - -"
+        "d '${cfg.uploadsDir}' 0750 ${user} ${webserver.group} - -"
+        "Z '${cfg.uploadsDir}' 0750 ${user} ${webserver.group} - -"
+      ]) eachSite);
 
-            DirectoryIndex index.php
-            Require all granted
-            Options +FollowSymLinks
-          </Directory>
+      systemd.services = mkMerge [
+        (mapAttrs' (hostName: cfg: (
+          nameValuePair "wordpress-init-${hostName}" {
+            wantedBy = [ "multi-user.target" ];
+            before = [ "phpfpm-wordpress-${hostName}.service" ];
+            after = optional cfg.database.createLocally "mysql.service";
+            script = secretsScript (stateDir hostName);
 
-          # https://wordpress.org/support/article/hardening-wordpress/#securing-wp-config-php
-          <Files wp-config.php>
-            Require all denied
-          </Files>
-        '';
-      } ]) eachSite;
-    };
+            serviceConfig = {
+              Type = "oneshot";
+              User = user;
+              Group = webserver.group;
+            };
+        })) eachSite)
 
-    systemd.tmpfiles.rules = flatten (mapAttrsToList (hostName: cfg: [
-      "d '${stateDir hostName}' 0750 ${user} ${group} - -"
-      "d '${cfg.uploadsDir}' 0750 ${user} ${group} - -"
-      "Z '${cfg.uploadsDir}' 0750 ${user} ${group} - -"
-    ]) eachSite);
+        (optionalAttrs (any (v: v.database.createLocally) (attrValues eachSite)) {
+          httpd.after = [ "mysql.service" ];
+        })
+      ];
 
-    systemd.services = mkMerge [
-      (mapAttrs' (hostName: cfg: (
-        nameValuePair "wordpress-init-${hostName}" {
-          wantedBy = [ "multi-user.target" ];
-          before = [ "phpfpm-wordpress-${hostName}.service" ];
-          after = optional cfg.database.createLocally "mysql.service";
-          script = secretsScript (stateDir hostName);
+      users.users.${user} = {
+        group = webserver.group;
+        isSystemUser = true;
+      };
+    }
+    (mkIf (cfg.webserver == "httpd") {
+      services.httpd = {
+        enable = true;
+        extraModules = [ "proxy_fcgi" ];
+        virtualHosts = mapAttrs (hostName: cfg: {
+          documentRoot = mkForce "${pkg hostName cfg}/share/wordpress";
+          extraConfig = ''
+            <Directory "${pkg hostName cfg}/share/wordpress">
+              <FilesMatch "\.php$">
+                <If "-f %{REQUEST_FILENAME}">
+                  SetHandler "proxy:unix:${config.services.phpfpm.pools."wordpress-${hostName}".socket}|fcgi://localhost/"
+                </If>
+              </FilesMatch>
 
-          serviceConfig = {
-            Type = "oneshot";
-            User = user;
-            Group = group;
+              # standard wordpress .htaccess contents
+              <IfModule mod_rewrite.c>
+                RewriteEngine On
+                RewriteBase /
+                RewriteRule ^index\.php$ - [L]
+                RewriteCond %{REQUEST_FILENAME} !-f
+                RewriteCond %{REQUEST_FILENAME} !-d
+                RewriteRule . /index.php [L]
+              </IfModule>
+
+              DirectoryIndex index.php
+              Require all granted
+              Options +FollowSymLinks
+            </Directory>
+
+            # https://wordpress.org/support/article/hardening-wordpress/#securing-wp-config-php
+            <Files wp-config.php>
+              Require all denied
+            </Files>
+          '';
+        }) eachSite;
+      };
+    })
+    (mkIf (cfg.webserver == "nginx") {
+      services.nginx = {
+        enable = true;
+        virtualHosts = mapAttrs (hostName: cfg: {
+          serverName = mkDefault hostName;
+          root = "${pkg hostName cfg}/share/wordpress";
+          extraConfig = ''
+            index index.php;
+          '';
+          locations = {
+            "/" = {
+              priority = 200;
+              extraConfig = ''
+                try_files $uri $uri/ /index.php$is_args$args;
+              '';
+            };
+            "~ \\.php$" = {
+              priority = 500;
+              extraConfig = ''
+                fastcgi_split_path_info ^(.+\.php)(/.+)$;
+                fastcgi_pass unix:${config.services.phpfpm.pools."wordpress-${hostName}".socket};
+                fastcgi_index index.php;
+                include "${config.services.nginx.package}/conf/fastcgi.conf";
+                fastcgi_param PATH_INFO $fastcgi_path_info;
+                fastcgi_param PATH_TRANSLATED $document_root$fastcgi_path_info;
+                # Mitigate https://httpoxy.org/ vulnerabilities
+                fastcgi_param HTTP_PROXY "";
+                fastcgi_intercept_errors off;
+                fastcgi_buffer_size 16k;
+                fastcgi_buffers 4 16k;
+                fastcgi_connect_timeout 300;
+                fastcgi_send_timeout 300;
+                fastcgi_read_timeout 300;
+              '';
+            };
+            "~ /\\." = {
+              priority = 800;
+              extraConfig = "deny all;";
+            };
+            "~* /(?:uploads|files)/.*\\.php$" = {
+              priority = 900;
+              extraConfig = "deny all;";
+            };
+            "~* \\.(js|css|png|jpg|jpeg|gif|ico)$" = {
+              priority = 1000;
+              extraConfig = ''
+                expires max;
+                log_not_found off;
+              '';
+            };
           };
-      })) eachSite)
+        }) eachSite;
+      };
+    })
 
-      (optionalAttrs (any (v: v.database.createLocally) (attrValues eachSite)) {
-        httpd.after = [ "mysql.service" ];
-      })
-    ];
-
-    users.users.${user} = {
-      group = group;
-      isSystemUser = true;
-    };
-
-  };
+  ]);
 }
