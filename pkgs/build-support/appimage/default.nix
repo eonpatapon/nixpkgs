@@ -28,6 +28,17 @@ rec {
     targetPkgs = pkgs: [ appimage-exec ]
       ++ defaultFhsEnvArgs.targetPkgs pkgs ++ extraPkgs pkgs;
 
+    extraInstallCommands = ''
+      [ -d ${src}/usr/share/icons ] && mkdir -p $out/share && ln -s ${src}/usr/share/icons $out/share/icons
+      for d in $(ls ${src}/*.desktop)
+      do
+        f=$(basename $d)
+        mkdir -p $out/share/applications
+        cp $d $out/share/applications
+        sed -i 's/Exec=AppRun/Exec=${name}/' $out/share/applications/$f
+      done
+    '';
+
     runScript = "appimage-exec.sh -w ${src}";
   } // (removeAttrs args (builtins.attrNames (builtins.functionArgs wrapAppImage))));
 
